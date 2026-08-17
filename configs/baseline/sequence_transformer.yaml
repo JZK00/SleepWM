@@ -1,0 +1,34 @@
+experiment:
+  id: baseline_causal_transformer
+  kind: forecast
+  seed: 20260804
+data:
+  manifest_path: ../data/manifests/hmc_cap_processed_manifest.csv
+  normalization_path: ../data/manifests/hmc_cap_train_normalization.json
+  stored_modalities: [EEG, ECG, EMG]
+  modalities: [EEG, ECG, EMG]
+  sample_rate: 128
+  epoch_seconds: 30
+  num_classes: 5
+  history_epochs: 20
+  future_horizons: [1, 2, 4, 10, 14]
+  sequence_stride: 8
+  sequence_start_offset: 0
+model:
+  name: transformer
+  d_model: 96
+  layers: 2
+  heads: 4
+  dropout: 0.10
+forecast: {}
+baseline_sequence:
+  full_modality_probability: 0.35
+train:
+  epochs: 12
+  batch_size: 24
+  num_workers: 4
+  learning_rate: 0.0003
+  weight_decay: 0.01
+  grad_clip: 1.0
+  device: cuda
+  output_dir: outputs/baselines/sequence_transformer

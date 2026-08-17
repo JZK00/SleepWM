@@ -1,0 +1,43 @@
+experiment:
+  id: sleepwm_train
+  kind: partial_observation_training
+  seed: 20260804
+
+baseline:
+  checkpoint_path: checkpoints/full_observation_teacher.pt
+  rollback_release: checkpoints
+
+data:
+  manifest_path: data/manifests/hmc_cap_processed_manifest.csv
+  normalization_path: data/manifests/hmc_cap_train_normalization.json
+
+physiology:
+  feature_manifest_path: data/derived/physio_features/feature_manifest.csv
+  feature_statistics_path: data/derived/physio_features/feature_statistics.json
+
+partial_observation:
+  hidden_dim: 128
+  initial_freshness_decay: 0.35
+  initial_uncertainty_age_scale: 0.15
+  initial_uncertainty_horizon_scale: 0.05
+
+belief_filter:
+  initial_checkpoint: checkpoints/sleepwm_initializer.pt
+  hidden_dim: 128
+  maximum_delta: 0.5
+  learning_rate: 0.0002
+  full_reference_macro_f1: 0.6116
+  maximum_full_drop: 0.005
+  losses:
+    trajectory: 4.0
+    dynamics: 2.0
+    future: 1.0
+    stage: 0.25
+
+train:
+  batch_size: 32
+  num_workers: 4
+  epochs: 4
+  grad_clip: 1.0
+  device: cuda:0
+  output_dir: outputs/sleepwm

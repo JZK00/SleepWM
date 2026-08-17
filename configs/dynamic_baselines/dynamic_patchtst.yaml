@@ -1,0 +1,49 @@
+experiment:
+  id: DB7_PATCHTST
+  kind: baseline
+  seed: 20260804
+data:
+  manifest_path: ../data/manifests/hmc_cap_processed_manifest.csv
+  normalization_path: ../data/manifests/hmc_cap_train_normalization.json
+  stored_modalities: [EEG, ECG, EMG]
+  modalities: [EEG, ECG, EMG]
+  sample_rate: 128
+  epoch_seconds: 30
+  num_classes: 5
+  history_epochs: 20
+  future_horizons: [1, 2, 4, 10, 14]
+  sequence_stride: 8
+  sequence_start_offset: 0
+physiology:
+  feature_manifest_path: ../data/derived/physio_features/feature_manifest.csv
+  feature_statistics_path: ../data/derived/physio_features/feature_statistics.json
+  feature_names: [eeg_log_delta_power, eeg_log_theta_power, eeg_log_alpha_power, eeg_log_beta_power, eeg_spectral_centroid_hz, ecg_hr_bpm, ecg_median_rr_ms, ecg_rmssd_ms, emg_log_rms, emg_log_mean_rectified, emg_high_frequency_ratio]
+  feature_groups:
+    EEG: [eeg_log_delta_power, eeg_log_theta_power, eeg_log_alpha_power, eeg_log_beta_power, eeg_spectral_centroid_hz]
+    ECG: [ecg_hr_bpm, ecg_median_rr_ms, ecg_rmssd_ms]
+    EMG: [emg_log_rms, emg_log_mean_rectified, emg_high_frequency_ratio]
+model:
+  architecture: patchtst
+  feature_dim: 32
+  hidden_dim: 96
+  layers: 2
+  heads: 4
+  patch_size: 4
+  patch_stride: 2
+  dropout: 0.10
+dynamic_baseline:
+  full_observation_probability: 0.35
+losses:
+  current_stage: 0.25
+  stage: 1.0
+  physiology: 1.0
+  consistency: 0.0
+train:
+  epochs: 10
+  batch_size: 24
+  num_workers: 4
+  learning_rate: 0.0003
+  weight_decay: 0.01
+  grad_clip: 1.0
+  device: cuda:0
+  output_dir: outputs/dynamic_paper_baselines_matched/patchtst

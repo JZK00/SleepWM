@@ -1,0 +1,35 @@
+experiment:
+  id: sleepwm_evaluate
+  seed: 20260804
+
+sleepwm:
+  checkpoint_path: checkpoints/sleepwm_backbone/run_01.pt
+
+data:
+  manifest_path: data/manifests/hmc_cap_processed_manifest.csv
+  normalization_path: data/manifests/hmc_cap_train_normalization.json
+
+physiology:
+  feature_manifest_path: data/derived/physio_features/feature_manifest.csv
+  feature_statistics_path: data/derived/physio_features/feature_statistics.json
+
+evaluation:
+  primary_horizons_epochs: [1, 2, 4]
+  conditions:
+    - full_observation
+    - hard_eeg_1ep
+    - hard_eeg_4ep
+    - hard_eeg_10ep
+    - hard_all_1ep
+    - hard_all_4ep
+    - hard_all_10ep
+    - linear_decay_all_4ep
+    - asynchronous_eeg4_ecg2_emg1
+    - recover_all_4ep_after_1ep
+    - recover_all_4ep_after_2ep
+
+train:
+  batch_size: 16
+  num_workers: 4
+  device: cuda:0
+  output_dir: outputs/sleepwm_evaluation

@@ -1,0 +1,28 @@
+experiment:
+  id: baseline_eeg_cnn_bilstm
+  kind: baseline
+  seed: 20260804
+data:
+  manifest_path: ../data/manifests/hmc_cap_processed_manifest.csv
+  normalization_path: ../data/manifests/hmc_cap_train_normalization.json
+  stored_modalities: [EEG, ECG, EMG]
+  modalities: [EEG]
+  sample_rate: 128
+  epoch_seconds: 30
+  num_classes: 5
+model:
+  name: cnn_bilstm
+  channels: 64
+  tokens: 16
+  hidden_dim: 64
+  dropout: 0.10
+train:
+  epochs: 30
+  batch_size: 128
+  num_workers: 4
+  learning_rate: 0.001
+  weight_decay: 0.01
+  grad_clip: 1.0
+  class_weighting: balanced
+  device: cuda
+  output_dir: outputs/baselines/eeg_cnn_bilstm

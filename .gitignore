@@ -1,0 +1,34 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+.coverage
+htmlcov/
+wandb/
+.DS_Store
+Thumbs.db
+.toy_data/
+outputs/
+logs/
+data/raw/
+data/processed/
+checkpoints/**/*.pt
+checkpoints/**/*.pth
+checkpoints/**/*.ckpt
+!checkpoints/sleepwm_backbone/*.pt
+!checkpoints/sleepwm_outcome_heads/*.pt
+!checkpoints/recovery_gate/*.pt
+!checkpoints/reliability_v2/*.pt
+*.egg-info/
+dist/
+build/
+
+# Manuscript and local statistical workspaces are intentionally separate.
+paper/
+results/
+
+# Local release bundles and large generated archives.
+*.tar.gz
+*.zip

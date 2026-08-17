@@ -1,0 +1,40 @@
+experiment:
+  id: P0_masked_latent
+  kind: pretrain
+  seed: 20260804
+
+data:
+  manifest_path: ../data/manifests/hmc_processed_manifest.csv
+  stored_modalities: [EEG, ECG, EMG]
+  modalities: [EEG, ECG, EMG]
+  sample_rate: 128
+  epoch_seconds: 30
+
+model:
+  patch_samples: 64
+  d_model: 128
+  layers: 4
+  heads: 4
+  dropout: 0.10
+
+objective:
+  mask_ratio: 0.35
+  min_span: 2
+  max_span: 8
+  full_modality_probability: 0.0
+  auxiliary_modality_drop_probability: 0.0
+  waveform_reconstruction_weight: 0.10
+  latent_reconstruction_weight: 1.0
+  teacher_target: contextual
+  teacher_momentum: 0.99
+  consistency_weight: 0.0
+
+train:
+  epochs: 50
+  batch_size: 64
+  num_workers: 4
+  learning_rate: 0.0003
+  weight_decay: 0.01
+  grad_clip: 1.0
+  device: cuda
+  output_dir: outputs/P0_masked_latent

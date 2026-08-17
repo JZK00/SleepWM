@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "Please cite the accompanying SleepWM paper and this software release."
+title: "SleepWM: Maintaining and Forecasting Latent Physiological Belief Under Dynamic Partial Observation"
+type: software
+version: 1.0.0
+date-released: 2026-08-16
+authors:
+  - family-names: "Wu"
+    given-names: "Rui"
+repository-code: "https://github.com/JZK00/SleepWM"
+license: MIT
+keywords:
+  - physiological world model
+  - dynamic partial observation
+  - sleep
+  - EEG
+  - ECG
+  - EMG
+abstract: >-
+  Research code for maintaining and forecasting a latent physiological belief
+  state from dynamically incomplete EEG, ECG, and EMG observations.

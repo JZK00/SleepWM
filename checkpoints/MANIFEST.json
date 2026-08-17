@@ -1,0 +1,25 @@
+{
+  "model_name": "SleepWM",
+  "release_tag": "sleepwm-v1.0-lightweight",
+  "archive_status": "bundled_with_source_release",
+  "archive_url": null,
+  "notes": "Lightweight deployment release with one matched inference checkpoint set. Public metadata paths were sanitized without modifying model tensors.",
+  "files": [
+    {
+      "path": "checkpoints/sleepwm_backbone/run_01.pt",
+      "sha256": "ac2f2a18b3f56f49670ac4ac485b6944fd86119c41982366ed5691fe4b3c3b2c"
+    },
+    {
+      "path": "checkpoints/sleepwm_outcome_heads/run_01.pt",
+      "sha256": "cc8ac8c7733f27dccacf04bc68335647a595abcf22c171c9d9663156d9829893"
+    },
+    {
+      "path": "checkpoints/recovery_gate/run_01.pt",
+      "sha256": "31eb0d1832cba650c12b1374ae244a59bcc1df54c89490b8695a06705b1bc658"
+    },
+    {
+      "path": "checkpoints/reliability_v2/run_01.pt",
+      "sha256": "078ec8ef718c3e8c6293b312b76881df48133453214d77f3ebf9394669660bb2"
+    }
+  ]
+}

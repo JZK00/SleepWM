@@ -1,0 +1,31 @@
+experiment:
+  id: B1_multimodal_tcn
+  kind: baseline
+  seed: 20260804
+
+data:
+  manifest_path: ../data/manifests/hmc_processed_manifest.csv
+  stored_modalities: [EEG, ECG, EMG]
+  modalities: [EEG, ECG, EMG]
+  sample_rate: 128
+  epoch_seconds: 30
+  num_classes: 5
+
+model:
+  name: tcn
+  channels: 64
+  levels: 4
+  kernel_size: 7
+  dropout: 0.10
+
+train:
+  epochs: 30
+  batch_size: 128
+  num_workers: 4
+  learning_rate: 0.001
+  weight_decay: 0.01
+  grad_clip: 1.0
+  class_weighting: balanced
+  device: cuda
+  output_dir: outputs/B1_multimodal_tcn
+
