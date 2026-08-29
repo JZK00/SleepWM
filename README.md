@@ -195,9 +195,8 @@ listed in [checkpoints/README.md](checkpoints/README.md) and
 
 ## Citation
 
-Citation metadata are provided in [CITATION.cff](CITATION.cff). Replace the
-repository-owner, venue, and DOI placeholders when the paper and archival
-release become public.
+If you find SleepWM useful for your research, please consider citing our work. 
+The citation information will be updated upon publication.
 
 ## License
 
