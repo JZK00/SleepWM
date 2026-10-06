@@ -1,114 +1,285 @@
 # SleepWM
 
-Code for **SleepWM: an observational world model for multimodal sleep state completion and forecasting**.
+### An observational world model for multimodal sleep state completion and forecasting
 
-SleepWM maintains a latent sleep state as EEG, ECG and EMG disappear and return. The final model predicts future sleep stages, 11 physiological features and stage-transition risk. Cross-modal pretraining learns correspondence between modalities within individual epochs; temporal prediction and partial-view state alignment are trained in subsequent stages.
+SleepWM connects cross-modal physiological learning with predictive-state maintenance under changing sensor availability. Given ten minutes of EEG, ECG and EMG history, it forecasts **sleep stages, continuous physiology and stage transitions 30, 60 and 120 seconds ahead**, while retaining and updating information as sensors disappear and return.
 
-This compact release focuses on the final model and its required training lineage. Historical configuration variants, auxiliary waveform-generation studies, external-transfer experiments, figure-generation scripts and benchmark suites are omitted. It contains source code, configurations and tests; recordings, participant manifests, weights and results must be obtained or produced separately.
+This repository provides the research implementation accompanying **“SleepWM is an observational world model for multimodal sleep state completion and forecasting.”**
 
-中文：这是主线精简版。训练、评估、数据处理各保留一个入口；全部配置集中在两个文件，模型和训练实现放在 `sleepwm/` 内。运行时需要另行准备数据和兼容权重。
+[Overview](#overview) · [Results](#results) · [Installation](#installation) · [Data](#data-preparation) · [Training](#training) · [Inference](#inference) · [Evaluation](#evaluation) · [Citation](#citation)
 
-## Layout
+## Overview
 
-```text
-train.py                 Run any required training stage
-evaluate.py              Final-model evaluation or synthetic inference check
-prepare_data.py          Normalization, physiological features and toy data
-sleepwm/                 Encoders, state updates, readouts and shared utilities
-  training/              Required staged training implementations
-configs/training.yaml    Selected-run settings and training dependencies
-configs/checkpoints.json Six final checkpoint paths
-tests/                   State/masking and readout regression tests
-```
+<p align="center">
+  <img src="assets/figure1.png" alt="SleepWM architecture: observation encoding, cross-modal pretraining, staged task adaptation, predict-correct state updating, and future-task readout." width="100%">
+</p>
 
-The other root files contain installation metadata, the MIT license, citation metadata and ignore rules. There are no separate reporting or documentation directories.
+**Figure 1. SleepWM framework.** Modality-specific front ends and a shared encoder integrate EEG, ECG and EMG. Cross-modal pretraining and reference-guided adaptation support state maintenance through partial observation, interruption and return. Task-specific readouts predict future sleep stages, physiology and transitions. The final physiology and event readouts also include a GRU-D direct-observation branch. The diagram is schematic; neither training teacher is required at inference. [View at full resolution](assets/figure1.png).
 
-## Install
+### Prediction tasks
 
-Use Python 3.10 or later. Run all commands from this repository root:
+| Input / output | Specification |
+| --- | --- |
+| Observation history | 20 × 30-second epochs at 128 Hz; modalities ordered EEG, ECG, EMG |
+| Primary forecast horizons | 30, 60 and 120 seconds after the history endpoint |
+| Future sleep stage | Wake, N1, N2, N3 or REM at each anchor |
+| Future physiology | 11 continuous features, standardized using training-set statistics |
+| Transition risk | Probability of at least one adjacent sleep-stage change before each anchor |
+
+These outputs describe future outcomes rather than classifications of the observed epochs. State completion means retaining or recovering task-relevant information in the predictive state; it does not assume a unique reconstruction of every missing waveform.
+
+### Learning and state maintenance
+
+1. **Cross-modal pretraining.** Masked waveform reconstruction and contextual latent prediction learn complementary signal representations from EEG, ECG and EMG without sleep labels. An exponential-moving-average teacher supplies latent targets. The archived run trained for five epochs and selected epoch 2; global consistency loss was disabled.
+2. **Reference learning.** The pretrained encoder initializes task training and the forecasting, physiology and observation-repair modules inherited by the final system.
+3. **Masked-history adaptation.** A frozen task-trained reference guides alignment of partial-view states and state changes. Availability, retained observations, observation age and reliability inform state correction when evidence is lost or returns.
+4. **Readout fitting.** Outcome and event adapters are fitted separately. The final physiology and transition predictions combine latent-state information with a trained GRU-D direct-observation branch.
+
+At inference, a predict-correct filter processes the history. Primary forecasts use future-state anchors corrected by the discrepancy at the history endpoint, followed by task-specific readouts. History-state propagation and the longer recursive extension play distinct roles. The reported primary results belong to the complete six-component system described in [Inference](#inference).
+
+## Results
+
+The primary benchmark holds participants, history length, future targets and horizons fixed while changing the observed evidence. It uses **40 held-out HMC+CAP participants** and compares SleepWM with eight systems under the same forecasting protocol.
+
+| Observation regime | Future-stage Macro-F1 ↑ | Standardized physiology MAE ↓ | Transition AUPRC ↑ |
+| --- | ---: | ---: | ---: |
+| Complete EEG+ECG+EMG | 0.6725 | 0.3837 | 0.4170 |
+| Dynamic partial observation | 0.5537 | 0.4361 | 0.3290 |
+
+Values are manuscript means across three downstream training runs initialized from a shared pretrained checkpoint (Supplementary Tables S1-S4). The three forecast horizons are weighted equally; the partial-observation summary additionally averages eight fixed conditions equally.
+
+SleepWM had the highest numerical mean for future staging and physiology among the evaluated comparators in both regimes. Under partial observation, transition AUPRC was 0.3290 versus 0.3298 for BRITS; the prespecified participant-level test did not establish transition superiority (Benjamini-Hochberg-adjusted *p* = 0.174). Model capacity and total optimization budgets were not matched, so these comparisons concern the complete learning systems under the reported configurations.
+
+### Cohorts
+
+| Cohort | Participants | Train | Validation | Test | Evaluation role |
+| --- | ---: | ---: | ---: | ---: | --- |
+| HMC | 151 | 104 | 23 | 24 | Internal development and test |
+| CAP | 107 | 78 | 13 | 16 | Internal development and test |
+| HMC+CAP | 258 | 182 | 36 | 40 | Combined internal split; primary frozen test |
+| ISRUC | 100 | 70 | 17 | 13 | External transfer |
+| Sleep-EDF | 100 | 65 | 22 | 13 | External transfer; 197 recordings |
+
+All splits are participant-disjoint; HMC+CAP summarizes the first two rows. Most component and sensor-combination analyses use the 36 internal validation participants. Source-only external tests assess future staging on 13 participants per cohort. Sleep-EDF has no matched ECG channel, which is marked unavailable.
+
+## Installation
+
+Use **Python 3.10 or later**. Dependencies are declared in [pyproject.toml](pyproject.toml): NumPy, SciPy, PyYAML, scikit-learn and PyTorch. The `dev` extra adds pytest. Run commands from the repository root; examples use Bash unless marked otherwise.
 
 ```bash
-pip install -e '.[dev]'
-CUDA_VISIBLE_DEVICES='' python -m pytest -q
+git clone https://github.com/JZK00/SleepWM.git
+cd SleepWM
+python -m pip install -e '.[dev]'
 ```
 
-For GPU execution, set `CUDA_VISIBLE_DEVICES` explicitly and address the visible device as `cuda:0`. For example, `CUDA_VISIBLE_DEVICES=4` assigns physical GPU 4. CPU checks use `CUDA_VISIBLE_DEVICES=''`.
+### First checks
 
-## Data
+The following commands do not require study data or pretrained weights:
 
-Prepare provider recordings as 30-second epochs at 128 Hz, in modality order EEG, ECG, EMG. Each record is an NPZ with `signals` shaped `[epochs, 3, 3840]`, integer `labels` (Wake, N1, N2, N3, REM = 0–4), and Boolean `modality_present` shaped `[epochs, 3]`. Signals retain physical units before train-fitted normalization. Unavailable channels are represented by the mask.
+```bash
+CUDA_VISIBLE_DEVICES='' python -m pytest -q
+python train.py --list
+python prepare_data.py toy --output-dir .toy_data
+```
 
-A CSV manifest needs `record_id,subject,split,npz_path`. Paths may be absolute or relative to the manifest. Prefix subject identifiers with the dataset name when combining cohorts, and keep each subject in exactly one split. Exact paper replication requires the original split assignment, channel choices and preprocessing; the NPZ schema alone does not establish equivalence. Provider-specific EDF conversion and frozen participant manifests are not included in this compact package.
+Toy records are synthetic inputs for software checks. Model inference requires compatible trained checkpoints, including for `evaluate.py --synthetic`. Recordings and pretrained weights are not distributed in this repository.
+
+For GPU execution, set `CUDA_VISIBLE_DEVICES` explicitly and address the selected GPU as `cuda:0`. On Windows PowerShell:
+
+```powershell
+$env:CUDA_VISIBLE_DEVICES = ''
+python -m pytest -q
+
+# For training with a CUDA-enabled PyTorch installation:
+$env:CUDA_VISIBLE_DEVICES = '0'
+python train.py --stage pretrain --device cuda:0
+```
+
+## Repository structure
+
+```text
+train.py                 Unified staged-training entry point
+evaluate.py              Dynamic-observation evaluation and synthetic inference
+prepare_data.py          Normalization, feature extraction and toy records
+sleepwm/                 Encoders, state updates, readouts and shared utilities
+  model.py               Six-component inference API
+  training/              Training implementations
+configs/
+  training.yaml          27 stage records and checkpoint dependencies
+  checkpoints.json       Six inference checkpoint paths
+tests/                   State/masking and readout regression tests
+assets/figure1.png        Framework overview
+CITATION.cff             Software citation metadata
+LICENSE                  MIT license
+pyproject.toml           Package metadata and dependencies
+```
+
+## Data preparation
+
+### Record format
+
+Obtain recordings through the dataset providers and follow their licenses and access procedures. Prepare each recording as an NPZ with the following fields:
+
+| Field | Shape | Description |
+| --- | --- | --- |
+| `signals` | `[epochs, 3, 3840]` | 30-second epochs at 128 Hz, ordered EEG, ECG, EMG |
+| `labels` | `[epochs]` | Wake=0, N1=1, N2=2, N3=3, REM=4 |
+| `modality_present` | `[epochs, 3]` | Boolean modality availability |
+
+Signals retain physical units before train-fitted normalization. Harmonize S3 and S4 to N3. Mark unavailable channels through the mask rather than treating zero-valued input as an observed channel.
+
+A CSV manifest requires `record_id,subject,split,npz_path`. Use `train`, `val` and `test` for split names. NPZ paths may be absolute or relative to the manifest. Prefix participant identifiers by cohort and keep each participant in exactly one split.
+
+The manuscript uses HMC EEG C4-M1, ECG and chin EMG; CAP primarily uses C4-A1, ECG1-ECG2 and EMG1-EMG2, with prespecified homologous mappings where needed. Sleep-EDF uses Fpz-Cz EEG and submental EMG with ECG unavailable. Exact replication requires the original channel choices, preprocessing and participant splits in addition to the input schema.
+
+### Normalization and targets
 
 ```bash
 python prepare_data.py normalize \
   --manifest data/manifests/hmc_cap_processed_manifest.csv \
   --output data/manifests/hmc_cap_train_normalization.json
+
 python prepare_data.py features \
   --manifest data/manifests/hmc_cap_processed_manifest.csv \
   --output-dir data/features
 ```
 
-Normalization and feature statistics are fitted on training subjects only. Feature extraction creates `feature_manifest.csv` and `feature_statistics.json` and defaults to train/validation records. Held-out evaluation requires separately prepared test feature records using the frozen training statistics. `python prepare_data.py toy --output-dir .toy_data` creates synthetic records for software checks; it does not reproduce study results. Each subcommand has `--help`.
+Normalization and feature statistics are fitted on training participants only. Feature extraction writes `feature_manifest.csv`, per-record feature NPZ files and `feature_statistics.json`.
 
-## Train
+| Modality | Physiological targets |
+| --- | --- |
+| EEG (5) | Log delta, theta, alpha and beta power; spectral centroid |
+| ECG (3) | Heart rate, median RR interval and RMSSD |
+| EMG (3) | Log RMS amplitude, log mean rectified amplitude and high-frequency power ratio |
 
-`configs/training.yaml` contains 27 stage records, ordered by checkpoint dependency. Identical blocks use YAML aliases. Export a stage to get a standalone editable YAML:
+EEG bands are 0.5-4, 4-8, 8-13 and 13-30 Hz; the spectral centroid spans 0.5-30 Hz. The EMG ratio is 20-45 Hz power divided by 5-45 Hz power. Invalid ECG targets are excluded by feature-validity masks. Reported physiology MAE uses standardized targets.
+
+The `features` CLI accepts training/validation splits and computes training statistics; it does not accept `--splits test`. For held-out evaluation, prepare test feature records separately using the frozen training statistics and a compatible feature manifest. Do not refit statistics on test participants. Each data subcommand exposes `--help`.
+
+## Training
+
+[configs/training.yaml](configs/training.yaml) records 27 selected-run stages and their checkpoint dependencies. Export a stage to obtain an editable standalone configuration:
 
 ```bash
 python train.py --list
 python train.py --stage pretrain --export-config pretrain.local.yaml
 python train.py --stage pretrain --stage-help
-CUDA_VISIBLE_DEVICES=4 python train.py --stage pretrain --device cuda:0
+CUDA_VISIBLE_DEVICES=0 python train.py \
+  --stage pretrain --config pretrain.local.yaml --device cuda:0
 ```
 
-To use edited paths/settings, add `--config pretrain.local.yaml`. Trainer-specific options such as `--epochs`, `--seed` and `--output-dir` are forwarded to the selected stage; consult `--stage-help`. An exported config for a checkpoint-driven event stage specifies its input checkpoints and optimizer-loop budget; data settings are inherited from those checkpoints. `SLEEPWM_DATA_ROOT` can relocate their embedded data paths.
+The training lineage includes cross-modal pretraining, task-trained reference construction, PO2 carry/correct adaptation, PO3 belief-state training, the PO4 outcome adapter, the GRU-D branch and hazard head, PO17 physiology/hazard adaptation and PO18 event correction. Follow the **`requires` fields printed by `--list`** for the actual dependency order. Waveform-related modules remain where they are inherited by the final checkpoint.
 
-The dependency sequence is:
+Edit exported configs for local data and checkpoint paths. Trainer-specific options such as `--epochs`, `--seed` and `--output-dir` are forwarded to the selected trainer; consult `--stage-help`. Checkpoint-driven event stages inherit data settings from their input checkpoints.
 
-1. **Cross-modal pretraining** (`pretrain`): within-epoch masked/contextual latent supervision, five training epochs, selected epoch 2 in the archived run.
-2. **Task-trained reference**: supervised sleep tasks, forecasting, physiology/waveform modules and observation repair. These modules remain because the actual final checkpoint inherits them.
-3. **Partial observation**: the two PO2 stages initialize the PO3 carry/correct state model (`po3_recursive_belief`).
-4. **Frozen-state readouts**: PO4 outcome adapter, the required direct-observation branch and hazard head, PO17 physiology/hazard adaptation, then PO18 event correction. Their `requires` entries identify the checkpoints to train first.
+Training writes to configured `outputs/` directories. Checkpoint loading can use the corresponding `outputs/` file when a configured `checkpoints/` path is absent. Use fresh output directories and update dependent paths together. `SLEEPWM_DATA_ROOT` and `SLEEPWM_CHECKPOINT_ROOT` relocate standard paths embedded in loaded checkpoint configurations.
 
-Training writes to the configured `outputs/` paths. Checkpoint loading also finds the corresponding `outputs/` file when a `checkpoints/` path is absent. Use fresh output directories for new experiments and update dependent paths together. The supplied configuration lineage is for seed 20260804. The paper's downstream runs share a pretrained initialization; this package does not imply three independent pretraining runs or include every run's weights.
+The supplied configuration lineage is for seed `20260804`. The manuscript's downstream repetitions share a pretrained initialization; weights for all repetitions are not included.
 
-## Evaluate
+## Inference
 
-The final system needs **six compatible checkpoint files**, listed in `configs/checkpoints.json`: PO3 state model, PO4 outcome adapter, direct-observation branch, PO17 latent adapter, direct hazard head and PO18 event correction. A single older checkpoint is insufficient. Use trusted checkpoints containing their configuration and model/adapter state dictionaries.
+The final system loads six compatible checkpoint files from [configs/checkpoints.json](configs/checkpoints.json):
+
+| Key | Component |
+| --- | --- |
+| `state` | PO3 recursive belief-state model |
+| `outcome` | PO4 trajectory-conditioned outcome adapter |
+| `direct` | GRU-D direct-observation branch |
+| `latent_hazard` | PO17 gated physiology/hazard adapter |
+| `direct_event` | Hazard head for the GRU-D branch |
+| `event_correction` | PO18 reliability-gated event correction |
+
+Supply all six from a compatible training lineage and update their paths in the JSON. Payloads contain configuration mappings and model/adapter state dictionaries. Use trusted checkpoints.
+
+### Synthetic inference
+
+After obtaining the six checkpoints:
 
 ```bash
-# Four synthetic histories; does not open a dataset.
 CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=4 python evaluate.py \
   --checkpoints configs/checkpoints.json --device cpu --synthetic
+```
 
-# Complete observation plus the eight primary partial-observation conditions.
-CUDA_VISIBLE_DEVICES=4 python evaluate.py \
+This checks complete observation, all-sensor loss, EEG loss and return after a gap without opening a dataset. It validates finite outputs, normalized stage probabilities, and bounded nondecreasing cumulative transition risk.
+
+### Python API
+
+```python
+import json
+import torch
+from sleepwm import SleepWM
+
+with open('configs/checkpoints.json', encoding='utf-8') as handle:
+    model = SleepWM.from_checkpoints(json.load(handle), device='cpu')
+
+# Synthetic normalized inputs: [batch, history, modalities, samples].
+signals = torch.randn(1, 20, 3, 3840)
+present = torch.ones(1, 20, 3, dtype=torch.bool)
+present[:, -4:, 0] = False  # EEG absent for the final 120 seconds.
+signals = signals * present.unsqueeze(-1)
+outputs = model(signals, present)
+
+primary = [model.horizons.index(h) for h in (1, 2, 4)]
+print(outputs['stage_probabilities'][:, primary].shape)  # [1, 3, 5]
+print(outputs['future_physiology'][:, primary].shape)    # [1, 3, 11]
+print(outputs['transition_risk'][:, primary].shape)      # [1, 3]
+```
+
+For real data, apply training-set normalization and zero unavailable signals **after normalization**. Modality order is EEG, ECG, EMG. Forecast axes follow `model.horizons`. The supplied configurations use `[1, 2, 4, 10, 14]`, giving five output anchors. The example selects the primary offsets `[1, 2, 4]` (30, 60 and 120 seconds); the 300- and 420-second anchors serve longer-range descriptive and boundary analyses. The API also returns `stage_logits` and `interval_hazard`. Transition risk is cumulative through each anchor; interval hazard describes the successive interval.
+
+## Evaluation
+
+### Primary observation protocol
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python evaluate.py \
   --checkpoints configs/checkpoints.json --device cuda:0 \
   --split val --protocol primary --output outputs/validation.json
 ```
 
-Use `--data-config local_data.yaml` to override the `data` and `physiology` path fields. `--protocol multiview` evaluates retained single/pair modality views at six interruption durations. The default split is validation; `--split test` explicitly selects held-out evaluation.
+The evaluator reports complete observation and eight fixed partial-observation conditions:
 
-The primary partial-observation summary averages **eight fixed conditions** over the 30/60/120-second anchors, not newly sampled random test masks. Those short-horizon predictions use corrected future anchors. History-state propagation and the longer recursive extension are different operations. Earlier PO4-only diagnostics and external-transfer experiments use different protocols and should not be pooled with these final-readout results.
+| Condition | Change within the history |
+| --- | --- |
+| `hard_eeg_1ep`, `hard_eeg_4ep`, `hard_eeg_10ep` | EEG loss for 30, 120 or 300 seconds |
+| `hard_all_1ep`, `hard_all_4ep`, `hard_all_10ep` | All-sensor loss for 30, 120 or 300 seconds |
+| `linear_decay_all_4ep` | All-sensor linear decay over 120 seconds |
+| `asynchronous_eeg4_ecg2_emg1` | EEG/ECG/EMG loss over 120/60/30 seconds |
 
-For direct Python inference:
+“Dynamic” refers to changing evidence within a history. Evaluation uses fixed masks. The JSON `dynamic` summary averages the eight partial conditions equally and excludes complete observation. Top-level endpoints average the three primary horizons; `by_horizon` keys use epoch offsets.
 
-```python
-import json
-from sleepwm import SleepWM
+Validation is the default split. With held-out feature records prepared, pass `--split test` explicitly for test evaluation. Reports record `split` and `test_split_accessed`. Use `--data-config local_data.yaml` to override `data` and `physiology` path fields, and `--batch-size`/`--workers` to control loading and inference batches.
 
-with open("configs/checkpoints.json") as handle:
-    model = SleepWM.from_checkpoints(json.load(handle), device="cpu")
-# signals: [batch, history, 3, samples]; present: matching Boolean [batch, history, 3]
-# Set unavailable signal values to zero before calling the model.
-outputs = model(signals, present)
+### Retained-view protocol
+
+`--protocol multiview` evaluates complete observation and the six retained single/pair modality combinations. Each reduced view applies to the last 30, 60, 90, 120, 180 or 300 seconds, following earlier multimodal context:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python evaluate.py \
+  --checkpoints configs/checkpoints.json --device cuda:0 \
+  --split val --protocol multiview --output outputs/multiview_validation.json
 ```
 
-## Verification and attribution
+Continuation after multimodal context differs from using one sensor throughout the history. Earlier outcome-adapter diagnostics, external-transfer analyses and interruption-route comparisons also use separately specified protocols and should be interpreted separately from the final-system benchmark.
 
-The compact release was checked on CPU with Python 3.10 and PyTorch 2.6.0: 21 targeted tests, argument parsing for all 27 stages, and synthetic end-to-end data preparation/evaluation. Loading the six archived checkpoints yielded 4,168,163 parameters. Every output was exactly equal to the previous release for complete observation, all-sensor loss, EEG loss and recovery after a gap. These checks establish software compatibility, not a new measurement of paper accuracy. Full training was not rerun.
+## Reproducibility
 
-The direct-observation branch implements GRU-D, which is needed internally by the final readout. Attribution: Che et al., *Recurrent Neural Networks for Multivariate Time Series with Missing Values*, Scientific Reports 8, 6085 (2018), https://doi.org/10.1038/s41598-018-24271-9. GRU-D is not claimed as a new SleepWM algorithm. Other comparator implementations are not bundled. Dependencies retain their own licenses.
+The repository provides model inference, staged training, normalization, feature extraction and dynamic-observation evaluation. Provider-specific EDF conversion, frozen participant-split manifests, pretrained weights, study outputs, external-transfer scripts, figure-generation code and the complete comparator/statistical analysis pipelines are not bundled. Obtain or generate those artifacts separately for the corresponding manuscript analyses.
 
-The original MIT notice is retained in `LICENSE`. Cite the accompanying article and `CITATION.cff`; update the article metadata and archival software identifier when finalized. Repository: https://github.com/JZK00/SleepWM.
+Archived CPU verification used Python 3.10 and PyTorch 2.6.0: 21 targeted tests, argument parsing for all 27 stages, and synthetic end-to-end data preparation/evaluation. The six archived checkpoints contained 4,168,163 parameters and matched the previous implementation exactly on complete observation, all-sensor loss, EEG loss and recovery after a gap. These checks establish software compatibility; full training was not rerun. The manuscript experiments used Linux, Python 3.8.10, PyTorch 2.2.2+cu121 and an RTX 3090, distinct from this package's Python requirement.
+
+Study results derive from retrospective controlled observation changes. Naturally occurring failures, prospective device performance and clinical workflows require further evaluation. The learned state is observational, and component ablations do not establish recursion alone as the source of the complete system's advantage.
+
+## Citation
+
+Software metadata are provided in [CITATION.cff](CITATION.cff). Cite the accompanying manuscript under its title:
+
+> *SleepWM is an observational world model for multimodal sleep state completion and forecasting.*
+
+A public manuscript link and permanent archival software identifier will be added when available.
+
+## License and acknowledgements
+
+The code is distributed under the [MIT license](LICENSE), with the original notice retained. Dataset access and redistribution follow provider licenses; dependencies retain their own licenses.
+
+The final readout includes GRU-D. Attribution: Che et al., *Recurrent Neural Networks for Multivariate Time Series with Missing Values*, Scientific Reports 8, 6085 (2018), [doi:10.1038/s41598-018-24271-9](https://doi.org/10.1038/s41598-018-24271-9).
