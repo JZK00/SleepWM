@@ -1,0 +1,1376 @@
+# Selected seed-20260804 settings and runnable training protocols.
+# YAML aliases share identical settings. Stage list follows checkpoint dependencies.
+stages:
+  pretrain:
+    module: sleepwm.training.pretrain
+    interface: config
+    requires: []
+    selected_epoch: 2
+    checkpoint: checkpoints/stage3/hmc_cap/pretrain/P1_contextual_latent_no_consistency/seed_20260804/best.pt
+    checkpoint_sha256: 6cb9d60b0b3e704e8e3823c7006f64ef2099119b15011dd0728e4318e4d8c329
+    config:
+      experiment:
+        id: P1_missing_modality_latent_no_consistency
+        kind: pretrain
+        seed: 20260804
+      data:
+        manifest_path: data/manifests/hmc_cap_processed_manifest.csv
+        stored_modalities: &id001
+        - EEG
+        - ECG
+        - EMG
+        modalities: *id001
+        sample_rate: 128
+        epoch_seconds: 30
+        normalization_path: data/manifests/hmc_cap_train_normalization.json
+      model:
+        patch_samples: 64
+        d_model: 128
+        layers: 4
+        heads: 4
+        dropout: 0.1
+      objective:
+        mask_ratio: 0.35
+        min_span: 2
+        max_span: 8
+        full_modality_probability: 0.35
+        auxiliary_modality_drop_probability: 0.2
+        waveform_reconstruction_weight: 0.1
+        latent_reconstruction_weight: 1.0
+        teacher_target: contextual
+        teacher_momentum: 0.99
+        consistency_weight: 0.0
+      train:
+        epochs: 5
+        batch_size: 64
+        num_workers: 4
+        learning_rate: 0.0003
+        weight_decay: 0.01
+        grad_clip: 1.0
+        device: cuda
+        output_dir: outputs/stage3/hmc_cap/pretrain/P1_contextual_latent_no_consistency/seed_20260804
+  downstream:
+    module: sleepwm.training.downstream
+    interface: config
+    requires:
+    - pretrain
+    selected_epoch: 10
+    checkpoint: checkpoints/stage3/hmc_cap/downstream_sampling/full_p35/contextual/seed_20260804/best.pt
+    checkpoint_sha256: 13a4b1d5052e7342f9ecc0954cef683818e923bf54e26efc4a11b5850ec4dcbf
+    config:
+      experiment:
+        id: T1_finetune_full_biased
+        kind: downstream
+        seed: 20260804
+      data:
+        manifest_path: data/manifests/hmc_cap_processed_manifest.csv
+        stored_modalities: *id001
+        modalities: *id001
+        sample_rate: 128
+        epoch_seconds: 30
+        num_classes: 5
+        normalization_path: data/manifests/hmc_cap_train_normalization.json
+      model:
+        name: transformer
+        patch_samples: 64
+        d_model: 128
+        layers: 4
+        heads: 4
+        dropout: 0.1
+        hidden_dim: 0
+      downstream:
+        pretrained_checkpoint: checkpoints/stage3/hmc_cap/pretrain/P1_contextual_latent_no_consistency/seed_20260804/best.pt
+        freeze_encoder: false
+        modality_subset_sampling: full_biased_nonempty
+        full_modality_probability: 0.35
+      train:
+        epochs: 10
+        batch_size: 64
+        num_workers: 4
+        learning_rate: 0.0001
+        weight_decay: 0.01
+        grad_clip: 1.0
+        class_weighting: balanced
+        device: cuda
+        output_dir: outputs/stage3/hmc_cap/downstream_sampling/full_p35/contextual/seed_20260804
+  contextual_long_history:
+    module: sleepwm.training.forecast
+    interface: config
+    requires:
+    - downstream
+    selected_epoch: 10
+    checkpoint: checkpoints/stage4/hmc_cap/quick/contextual_long_history/seed_20260804/best.pt
+    checkpoint_sha256: 1cf055a84fad2173780c810b4c5c4e242ea9353263499f736cd5f07f848b9194
+    config:
+      experiment:
+        id: F0_causal_rollout_long_history_gate
+        kind: forecast
+        seed: 20260804
+      data: &id002
+        manifest_path: data/manifests/hmc_cap_processed_manifest.csv
+        normalization_path: data/manifests/hmc_cap_train_normalization.json
+        stored_modalities: *id001
+        modalities: *id001
+        sample_rate: 128
+        epoch_seconds: 30
+        num_classes: 5
+        history_epochs: 20
+        future_horizons: &id013
+        - 1
+        - 2
+        - 4
+        sequence_stride: 8
+        sequence_start_offset: 0
+      model: &id003
+        patch_samples: 64
+        d_model: 128
+        layers: 4
+        heads: 4
+        dropout: 0.1
+        transition_layers: 2
+        transition_heads: 4
+      forecast:
+        pretrained_checkpoint: checkpoints/stage3/hmc_cap/downstream_sampling/full_p35/contextual/seed_20260804/best.pt
+        freeze_observation_encoder: false
+        use_frozen_target_encoder: true
+        stage_residual_from_current: true
+        latent_weight: 1.0
+        stage_weight: 1.0
+        current_stage_weight: 1.0
+        encoder_learning_rate: 1.0e-05
+      train:
+        epochs: 10
+        batch_size: 16
+        num_workers: 4
+        learning_rate: 0.0001
+        weight_decay: 0.01
+        grad_clip: 1.0
+        class_weighting: balanced
+        device: cuda
+        output_dir: outputs/stage4/hmc_cap/quick/contextual_long_history/seed_20260804
+  physiology_frontend:
+    module: sleepwm.training.physio_forecast
+    interface: config
+    requires:
+    - contextual_long_history
+    selected_epoch: 10
+    checkpoint: checkpoints/stage5/hmc_cap/physiology_frontend/seed_20260804/best.pt
+    checkpoint_sha256: 6c0708c0b03b72b4db282f3c79c7045855a860105a0de856e534cf7839d34929
+    config:
+      experiment:
+        id: F4_physiology_frontend_long_history
+        kind: forecast
+        seed: 20260804
+      data: *id002
+      model: *id003
+      forecast: &id004
+        freeze_observation_encoder: false
+        use_frozen_target_encoder: true
+        stage_residual_from_current: true
+        latent_weight: 1.0
+        stage_weight: 1.0
+        current_stage_weight: 1.0
+      physiology:
+        initial_world_model_checkpoint: checkpoints/stage4/hmc_cap/quick/contextual_long_history/seed_20260804/best.pt
+        feature_manifest_path: data/features/feature_manifest.csv
+        feature_statistics_path: data/features/feature_statistics.json
+        feature_names: &id005
+        - eeg_log_delta_power
+        - eeg_log_theta_power
+        - eeg_log_alpha_power
+        - eeg_log_beta_power
+        - eeg_spectral_centroid_hz
+        - ecg_hr_bpm
+        - ecg_median_rr_ms
+        - ecg_rmssd_ms
+        - emg_log_rms
+        - emg_log_mean_rectified
+        - emg_high_frequency_ratio
+        feature_groups: &id006
+          EEG:
+          - eeg_log_delta_power
+          - eeg_log_theta_power
+          - eeg_log_alpha_power
+          - eeg_log_beta_power
+          - eeg_spectral_centroid_hz
+          ECG:
+          - ecg_hr_bpm
+          - ecg_median_rr_ms
+          - ecg_rmssd_ms
+          EMG:
+          - emg_log_rms
+          - emg_log_mean_rectified
+          - emg_high_frequency_ratio
+        history_trajectory_supervision: true
+        modality_physiology_frontend: true
+        hidden_dim: 128
+        history_weight: 1.0
+        future_weight: 1.0
+        backbone_learning_rate: 1.0e-05
+        head_learning_rate: 0.0001
+        stage_retention_floor: 0.5832814684
+        f2_current_normalized_mae: 0.4774582521
+        f2_current_ecg_normalized_mae: 0.5936030746
+        f2_future_normalized_mae: 0.5300306217
+        observation_relative_improvement: 0.1
+        ar_normalized_mae: 0.2879683903
+        ar_group_normalized_mae: &id007
+          EEG: 0.3380975563
+          ECG: 0.2156085391
+          EMG: 0.2767796315
+      train:
+        epochs: 10
+        batch_size: 16
+        num_workers: 4
+        learning_rate: 0.0001
+        weight_decay: 0.01
+        grad_clip: 1.0
+        class_weighting: balanced
+        device: cuda
+        output_dir: outputs/stage5/hmc_cap/physiology_frontend/seed_20260804
+  physiology_state_space:
+    module: sleepwm.training.physio_forecast
+    interface: config
+    requires:
+    - physiology_frontend
+    selected_epoch: 9
+    checkpoint: checkpoints/stage5/hmc_cap/physiology_state_space/seed_20260804/best.pt
+    checkpoint_sha256: 419449f214de0d884508355b8e35b0ad4bc372e5d419f75c2a4a04847f61f3a9
+    config:
+      experiment:
+        id: F5_physiology_state_space_long_history
+        kind: forecast
+        seed: 20260804
+      data: *id002
+      model: *id003
+      forecast: *id004
+      physiology:
+        initial_world_model_checkpoint: checkpoints/stage5/hmc_cap/physiology_frontend/seed_20260804/best.pt
+        feature_manifest_path: data/features/feature_manifest.csv
+        feature_statistics_path: data/features/feature_statistics.json
+        feature_names: *id005
+        feature_groups: *id006
+        history_trajectory_supervision: true
+        modality_physiology_frontend: true
+        physiology_state_space_dynamics: true
+        physiology_dynamics_dim: 64
+        physiology_dynamics_layers: 1
+        physiology_dynamics_heads: 4
+        hidden_dim: 128
+        history_weight: 1.0
+        future_weight: 1.0
+        backbone_learning_rate: 1.0e-05
+        head_learning_rate: 0.0001
+        stage_retention_floor: 0.5832814684
+        f4_current_normalized_mae: 0.3697429977
+        f4_future_normalized_mae: 0.4491463737
+        f4_group_normalized_mae:
+          EEG: 0.4631545126
+          ECG: 0.4105220934
+          EMG: 0.4644237558
+        future_relative_improvement: 0.1
+        current_regression_tolerance: 0.01
+        ar_normalized_mae: 0.2879683903
+        ar_group_normalized_mae: *id007
+      train:
+        epochs: 10
+        batch_size: 16
+        num_workers: 4
+        learning_rate: 0.0001
+        weight_decay: 0.01
+        grad_clip: 1.0
+        class_weighting: balanced
+        device: cuda
+        output_dir: outputs/stage5/hmc_cap/physiology_state_space/seed_20260804
+  direct:
+    module: sleepwm.training.direct_observation_branch
+    interface: config
+    requires: []
+    selected_epoch: 10
+    checkpoint: checkpoints/dynamic_paper_baselines_matched/grud/seed_20260804/best.pt
+    checkpoint_sha256: 64f3dfe8137796a5ba5c9dc6558933767e0507e033ed7b1d2ab8378709dc55fd
+    config:
+      experiment:
+        id: DB1_GRUD
+        seed: 20260804
+      data: &id012
+        manifest_path: data/manifests/hmc_cap_processed_manifest.csv
+        normalization_path: data/manifests/hmc_cap_train_normalization.json
+        stored_modalities: *id001
+        modalities: *id001
+        sample_rate: 128
+        epoch_seconds: 30
+        num_classes: 5
+        history_epochs: 20
+        future_horizons:
+        - 1
+        - 2
+        - 4
+        - 10
+        - 14
+        sequence_stride: 8
+        sequence_start_offset: 0
+      physiology:
+        feature_manifest_path: data/features/feature_manifest.csv
+        feature_statistics_path: data/features/feature_statistics.json
+        feature_names: *id005
+        feature_groups: *id006
+      model:
+        architecture: grud
+        feature_dim: 32
+        hidden_dim: 96
+        layers: 2
+        heads: 4
+        dropout: 0.1
+      dynamic_baseline:
+        full_observation_probability: 0.35
+      losses:
+        current_stage: 0.25
+        stage: 1.0
+        physiology: 1.0
+        consistency: 0.0
+      train:
+        epochs: 10
+        batch_size: 24
+        num_workers: 4
+        learning_rate: 0.0005
+        weight_decay: 0.01
+        grad_clip: 1.0
+        device: cuda:0
+        output_dir: outputs/dynamic_paper_baselines_matched
+  structured_waveform_decoder:
+    module: sleepwm.training.waveform_forecast
+    interface: config
+    requires:
+    - physiology_state_space
+    selected_epoch: 10
+    checkpoint: checkpoints/stage5/hmc_cap/structured_waveform_decoder/seed_20260804/best.pt
+    checkpoint_sha256: f0a177ffedacccfb40b4e56dff2c729629d81f703ec7b41bf43c55c99deb2ce7
+    config:
+      experiment:
+        id: F5W2_structured_waveform_decoder_long_history
+        kind: forecast
+        seed: 20260804
+      data: *id002
+      model: *id003
+      forecast: *id004
+      physiology: &id008
+        feature_manifest_path: data/features/feature_manifest.csv
+        feature_statistics_path: data/features/feature_statistics.json
+        feature_names: *id005
+        feature_groups: *id006
+        hidden_dim: 128
+        physiology_dynamics_dim: 64
+        physiology_dynamics_layers: 1
+        physiology_dynamics_heads: 4
+      waveform:
+        initial_world_model_checkpoint: checkpoints/stage5/hmc_cap/physiology_state_space/seed_20260804/best.pt
+        horizons_seconds: &id009
+        - 1
+        - 5
+        - 10
+        max_seconds: 10
+        patch_samples: 64
+        decoder_dim: 64
+        decoder_layers: 1
+        decoder_heads: 4
+        structured_event_heads: true
+        multi_resolution_fft_sizes: &id010
+        - 32
+        - 64
+        - 128
+        - 256
+        time_weight: 1.0
+        spectral_weight: 0.25
+        structure_weight: 0.25
+        auxiliary_structure_weight: 0.25
+        learning_rate: 0.0001
+        relative_mae_improvement: 0.02
+      train:
+        epochs: 10
+        batch_size: 32
+        num_workers: 4
+        learning_rate: 0.0001
+        weight_decay: 0.01
+        grad_clip: 1.0
+        device: cuda
+        output_dir: outputs/stage5/hmc_cap/structured_waveform_decoder/seed_20260804
+  direct_event:
+    module: sleepwm.training.direct_event_adapter
+    interface: checkpoints
+    requires:
+    - direct
+    selected_epoch: 4
+    checkpoint: checkpoints/dynamic_event_hazard_matched/grud/seed_20260804/best.pt
+    checkpoint_sha256: 96f062fa1552286742912327759bd4a95f9513771f1eccb666fcbcb27edd28bc
+    config:
+      experiment: &id026
+        seed: 20260804
+      checkpoints:
+        baseline: checkpoints/dynamic_paper_baselines_matched/grud/seed_20260804/best.pt
+      train:
+        device: cuda:0
+        epochs: 5
+        output_dir: outputs/dynamic_event_hazard_matched/grud
+  probabilistic_event_waveform:
+    module: sleepwm.training.probabilistic_waveform_forecast
+    interface: config
+    requires:
+    - physiology_state_space
+    - structured_waveform_decoder
+    selected_epoch: 10
+    checkpoint: checkpoints/stage6/hmc_cap/probabilistic_event_waveform/seed_20260804/best.pt
+    checkpoint_sha256: 7ac70967e2b4d9203ecb331965ce19e867d2be24d7763b73a2d1ad99edc2b445
+    config:
+      experiment:
+        id: S6P0_probabilistic_event_waveform_long_history
+        kind: forecast
+        seed: 20260804
+      data: *id002
+      model: *id003
+      forecast: *id004
+      physiology: *id008
+      waveform:
+        initial_world_model_checkpoint: checkpoints/stage5/hmc_cap/physiology_state_space/seed_20260804/best.pt
+        initial_waveform_checkpoint: checkpoints/stage5/hmc_cap/structured_waveform_decoder/seed_20260804/best.pt
+        horizons_seconds: *id009
+        max_seconds: 10
+        patch_samples: 64
+        decoder_dim: 64
+        decoder_layers: 1
+        decoder_heads: 4
+        structured_event_heads: true
+        probabilistic_event_heads: true
+        multi_resolution_fft_sizes: *id010
+        time_weight: 1.0
+        spectral_weight: 0.25
+        structure_weight: 0.25
+        probability_weight: 0.25
+        learning_rate: 0.0001
+        relative_mae_improvement: 0.02
+      train:
+        epochs: 10
+        batch_size: 32
+        num_workers: 4
+        learning_rate: 0.0001
+        weight_decay: 0.01
+        grad_clip: 1.0
+        device: cuda
+        output_dir: outputs/stage6/hmc_cap/probabilistic_event_waveform/seed_20260804
+  missing_modality_rollout_finetune:
+    module: sleepwm.training.missing_rollout
+    interface: config
+    requires:
+    - physiology_state_space
+    - probabilistic_event_waveform
+    - structured_waveform_decoder
+    selected_epoch: 5
+    checkpoint: checkpoints/stage7/hmc_cap/missing_modality_rollout_finetune/seed_20260804/best.pt
+    checkpoint_sha256: 4bcc2fe50a24c94442718b80bb6427ad967a741e0d2481f6d6fc6d1171ba2a04
+    config:
+      experiment:
+        id: S7M1_missing_modality_rollout_finetune
+        kind: forecast
+        seed: 20260804
+      data: *id002
+      model: *id003
+      forecast: *id004
+      physiology:
+        feature_manifest_path: data/features/feature_manifest.csv
+        feature_statistics_path: data/features/feature_statistics.json
+        feature_names: *id005
+        feature_groups: *id006
+        hidden_dim: 128
+        physiology_dynamics_dim: 64
+        physiology_dynamics_layers: 1
+        physiology_dynamics_heads: 4
+        history_weight: 1.0
+        future_weight: 1.0
+      waveform:
+        initial_world_model_checkpoint: checkpoints/stage5/hmc_cap/physiology_state_space/seed_20260804/best.pt
+        initial_waveform_checkpoint: checkpoints/stage5/hmc_cap/structured_waveform_decoder/seed_20260804/best.pt
+        horizons_seconds: *id009
+        max_seconds: 10
+        patch_samples: 64
+        decoder_dim: 64
+        decoder_layers: 1
+        decoder_heads: 4
+        structured_event_heads: true
+        probabilistic_event_heads: true
+        multi_resolution_fft_sizes: *id010
+        time_weight: 1.0
+        spectral_weight: 0.25
+        structure_weight: 0.25
+        probability_weight: 0.25
+      stage7:
+        checkpoint_path: checkpoints/stage6/hmc_cap/probabilistic_event_waveform/seed_20260804/best.pt
+        full_modality_probability: 0.35
+        backbone_learning_rate: 1.0e-05
+        waveform_learning_rate: 5.0e-05
+        full_stage_retention_floor: 0.5941
+        mean_stage_drop_limit: 0.1
+        worst_stage_drop_limit: 0.2
+        physiology_mae_ratio_limit: 1.25
+        waveform_mae_ratio_limit: 1.25
+        uncertainty_modalities_required: 2
+      train:
+        epochs: 5
+        batch_size: 32
+        num_workers: 4
+        learning_rate: 1.0e-05
+        weight_decay: 0.01
+        grad_clip: 1.0
+        class_weighting: balanced
+        device: cuda
+        output_dir: outputs/stage7/hmc_cap/missing_modality_rollout_finetune/seed_20260804
+  observation_repair:
+    module: sleepwm.training.observation_repair
+    interface: config
+    requires:
+    - missing_modality_rollout_finetune
+    selected_epoch: 3
+    checkpoint: checkpoints/stage7/hmc_cap/observation_repair/seed_20260804/best.pt
+    checkpoint_sha256: ab012713e9538c5185eb0e13d24d72d0c9f40e89a1d09d17c8e56a1899beccd1
+    config:
+      experiment:
+        id: S7O1_observation_repair_distillation
+        kind: forecast
+        seed: 20260804
+      data: *id002
+      model: *id003
+      forecast:
+        freeze_observation_encoder: false
+        use_frozen_target_encoder: true
+        stage_residual_from_current: true
+        latent_weight: 1.0
+        stage_weight: 1.0
+        current_stage_weight: 0.0
+      physiology:
+        feature_manifest_path: data/features/feature_manifest.csv
+        feature_statistics_path: data/features/feature_statistics.json
+        feature_names: *id005
+        feature_groups: *id006
+        hidden_dim: 128
+        physiology_dynamics_dim: 64
+        physiology_dynamics_layers: 1
+        physiology_dynamics_heads: 4
+        history_weight: 0.0
+        future_weight: 1.0
+      waveform:
+        horizons_seconds: *id009
+        max_seconds: 10
+        patch_samples: 64
+        decoder_dim: 64
+        decoder_layers: 1
+        decoder_heads: 4
+        structured_event_heads: true
+        probabilistic_event_heads: true
+        time_weight: 0.0
+        spectral_weight: 0.25
+        structure_weight: 0.25
+        probability_weight: 0.0
+      observation_repair:
+        checkpoint_path: checkpoints/stage7/hmc_cap/missing_modality_rollout_finetune/seed_20260804/best.pt
+        hidden_dim: 128
+        learning_rate: 0.0001
+        full_modality_probability: 0.35
+        distillation_weight: 1.0
+        future_distillation_weight: 0.25
+        minimum_alignment_improvement: 0.05
+        maximum_full_stage_drop: 0.005
+        minimum_nonfull_stage_delta: 0.0
+        minimum_single_modality_stage_delta: -0.005
+        maximum_waveform_ratio: 1.02
+      train:
+        epochs: 5
+        batch_size: 32
+        num_workers: 4
+        learning_rate: 0.0001
+        weight_decay: 0.01
+        grad_clip: 1.0
+        class_weighting: balanced
+        device: cuda
+        output_dir: outputs/stage7/hmc_cap/observation_repair/seed_20260804
+  task_observation_repair:
+    module: sleepwm.training.task_aware_observation
+    interface: config
+    requires:
+    - observation_repair
+    selected_epoch: 5
+    checkpoint: checkpoints/stage7/hmc_cap/task_observation_repair/seed_20260804/best.pt
+    checkpoint_sha256: 0e45ff4e3b5986eee52747ff325a0b40696d29e382f0c25a164b432c40eb360e
+    config:
+      experiment:
+        id: S7O2_task_aware_observation_repair
+        kind: forecast
+        seed: 20260804
+      data: *id002
+      model: *id003
+      forecast: &id011
+        freeze_observation_encoder: false
+        use_frozen_target_encoder: true
+        stage_residual_from_current: true
+      physiology: *id008
+      waveform:
+        horizons_seconds: *id009
+        max_seconds: 10
+        patch_samples: 64
+        decoder_dim: 64
+        decoder_layers: 1
+        decoder_heads: 4
+        structured_event_heads: true
+        probabilistic_event_heads: true
+      observation_repair:
+        checkpoint_path: checkpoints/stage7/hmc_cap/observation_repair/seed_20260804/best.pt
+        hidden_dim: 128
+        task_hidden_dim: 128
+        task_learning_rate: 0.0001
+        full_modality_probability: 0.35
+        stage_distillation_weight: 1.0
+        physiology_distillation_weight: 1.0
+        minimum_alignment_improvement: 0.05
+        maximum_full_stage_drop: 0.005
+        minimum_nonfull_stage_delta: 0.0
+        minimum_single_modality_stage_delta: -0.005
+        maximum_waveform_ratio: 1.02
+      train:
+        epochs: 5
+        batch_size: 32
+        num_workers: 4
+        weight_decay: 0.01
+        grad_clip: 1.0
+        device: cuda
+        output_dir: outputs/stage7/hmc_cap/task_observation_repair/seed_20260804
+  refractory_ecg_event_waveform:
+    module: sleepwm.training.probabilistic_waveform_forecast
+    interface: config
+    requires:
+    - physiology_state_space
+    - probabilistic_event_waveform
+    selected_epoch: 10
+    checkpoint: checkpoints/stage6/hmc_cap/refractory_ecg_event_waveform/seed_20260804/best.pt
+    checkpoint_sha256: 729ce9837cff922995c6179b7a42a8557fde19b61a11d34c5c7c7e65bd5d4ccb
+    config:
+      experiment:
+        id: S6P1_refractory_ecg_event_waveform_long_history
+        kind: forecast
+        seed: 20260804
+      data: *id002
+      model: *id003
+      forecast: *id004
+      physiology: *id008
+      waveform:
+        initial_world_model_checkpoint: checkpoints/stage5/hmc_cap/physiology_state_space/seed_20260804/best.pt
+        initial_waveform_checkpoint: checkpoints/stage6/hmc_cap/probabilistic_event_waveform/seed_20260804/best.pt
+        horizons_seconds: *id009
+        max_seconds: 10
+        patch_samples: 64
+        decoder_dim: 64
+        decoder_layers: 1
+        decoder_heads: 4
+        structured_event_heads: true
+        probabilistic_event_heads: true
+        ecg_refractory_event_head: true
+        ecg_rr_bins: 48
+        multi_resolution_fft_sizes: *id010
+        time_weight: 1.0
+        spectral_weight: 0.25
+        structure_weight: 0.25
+        probability_weight: 0.25
+        learning_rate: 0.0001
+        relative_mae_improvement: 0.02
+      train:
+        epochs: 10
+        batch_size: 32
+        num_workers: 4
+        learning_rate: 0.0001
+        weight_decay: 0.01
+        grad_clip: 1.0
+        device: cuda
+        output_dir: outputs/stage6/hmc_cap/refractory_ecg_event_waveform/seed_20260804
+  independent_event_waveform:
+    module: sleepwm.training.independent_waveform_generator
+    interface: config
+    requires:
+    - refractory_ecg_event_waveform
+    selected_epoch: 10
+    checkpoint: checkpoints/stage7/hmc_cap/independent_event_waveform/seed_20260804/best.pt
+    checkpoint_sha256: 375b2ba7ae627ed811c83b37088498f96b97cf7ee5d6af77c7becb37efd751cc
+    config:
+      experiment:
+        id: S7W3_independent_event_waveform
+        kind: forecast
+        seed: 20260804
+      data: *id002
+      model: *id003
+      forecast: *id011
+      physiology: *id008
+      waveform:
+        initial_waveform_checkpoint: checkpoints/stage6/hmc_cap/refractory_ecg_event_waveform/seed_20260804/best.pt
+        horizons_seconds: *id009
+        max_seconds: 10
+        patch_samples: 64
+        decoder_dim: 64
+        decoder_layers: 1
+        decoder_heads: 4
+        structured_event_heads: true
+        probabilistic_event_heads: true
+        ecg_refractory_event_head: true
+        ecg_rr_bins: 48
+        output_baseline: none
+        multi_resolution_fft_sizes: *id010
+        time_weight: 1.0
+        spectral_weight: 0.25
+        structure_weight: 0.25
+        auxiliary_structure_weight: 0.25
+        probability_weight: 0.25
+        learning_rate: 0.0001
+        maximum_repeat_ratio: 1.15
+      train:
+        epochs: 10
+        batch_size: 32
+        num_workers: 4
+        weight_decay: 0.01
+        grad_clip: 1.0
+        device: cuda
+        output_dir: outputs/stage7/hmc_cap/independent_event_waveform/seed_20260804
+  physiological_event_waveform:
+    module: sleepwm.training.independent_waveform_generator
+    interface: config
+    requires:
+    - independent_event_waveform
+    selected_epoch: 5
+    checkpoint: checkpoints/stage7/hmc_cap/physiological_event_waveform/seed_20260804/best.pt
+    checkpoint_sha256: e132cba2e0fe5fd029b248cb8fda1a3c7e1e84a36118710297f1a32a5ea16d4a
+    config:
+      experiment:
+        id: S7W4_physiological_event_waveform
+        kind: forecast
+        seed: 20260804
+      data: *id002
+      model: *id003
+      forecast: *id011
+      physiology: *id008
+      waveform:
+        initial_waveform_checkpoint: checkpoints/stage7/hmc_cap/independent_event_waveform/seed_20260804/best.pt
+        horizons_seconds: *id009
+        max_seconds: 10
+        patch_samples: 64
+        decoder_dim: 64
+        decoder_layers: 1
+        decoder_heads: 4
+        structured_event_heads: true
+        probabilistic_event_heads: true
+        ecg_refractory_event_head: true
+        ecg_rr_bins: 48
+        output_baseline: none
+        physiological_event_renderer: true
+        multi_resolution_fft_sizes: *id010
+        time_weight: 1.0
+        spectral_weight: 0.25
+        structure_weight: 0.25
+        auxiliary_structure_weight: 0.25
+        probability_weight: 0.25
+        learning_rate: 0.0001
+        maximum_repeat_ratio: 1.15
+      train:
+        epochs: 5
+        batch_size: 32
+        num_workers: 4
+        weight_decay: 0.01
+        grad_clip: 1.0
+        device: cuda
+        output_dir: outputs/stage7/hmc_cap/physiological_event_waveform/seed_20260804
+  anchored_gated_long_recursive_rollout:
+    module: sleepwm.training.gated_long_rollout
+    interface: config
+    requires:
+    - task_observation_repair
+    selected_epoch: 5
+    checkpoint: checkpoints/stage7/hmc_cap/anchored_gated_long_recursive_rollout/seed_20260804/best.pt
+    checkpoint_sha256: 15fe9971821e1666e2fd76364a116a32be9dcf46410407f9125ed8036ae98af9
+    config:
+      experiment:
+        id: S7R2_anchored_gated_long_recursive_rollout
+        kind: forecast
+        seed: 20260804
+      data: *id012
+      model: *id003
+      forecast: *id011
+      physiology: *id008
+      waveform: &id014
+        max_seconds: 10
+        patch_samples: 64
+        decoder_dim: 64
+        decoder_layers: 1
+        decoder_heads: 4
+      observation_repair: &id015
+        hidden_dim: 128
+        task_hidden_dim: 128
+      recursive:
+        checkpoint_path: checkpoints/stage7/hmc_cap/task_observation_repair/seed_20260804/best.pt
+        direct_horizons: *id013
+        long_horizons: &id016
+        - 10
+        - 14
+        anchor_direct: true
+        hidden_dim: 128
+        learning_rate: 0.0001
+        full_modality_probability: 0.35
+        latent_weight: 1.0
+        stage_weight: 1.0
+        physiology_weight: 1.0
+        short_teacher_weight: 0.25
+        uncertainty_weight: 0.1
+        maximum_short_stage_drop: 0.005
+        minimum_correction_rms: 0.0001
+        minimum_uncertainty_std: 0.0001
+        minimum_subset_gate_range: 0.0001
+      train:
+        epochs: 8
+        batch_size: 32
+        num_workers: 4
+        weight_decay: 0.01
+        grad_clip: 1.0
+        device: cuda
+        output_dir: outputs/stage7/hmc_cap/anchored_gated_long_recursive_rollout/seed_20260804
+  overlap_add_physiological_waveform:
+    module: sleepwm.training.independent_waveform_generator
+    interface: config
+    requires:
+    - physiological_event_waveform
+    selected_epoch: 3
+    checkpoint: checkpoints/stage7/hmc_cap/overlap_add_physiological_waveform/seed_20260804/best.pt
+    checkpoint_sha256: 01b2bad99d335dc0cc72bac580d3ba572d085d0ced252765f4c60ca31c41b13b
+    config:
+      experiment:
+        id: S7W5_overlap_add_physiological_waveform
+        kind: forecast
+        seed: 20260804
+      data: *id002
+      model: *id003
+      forecast: *id011
+      physiology: *id008
+      waveform:
+        initial_waveform_checkpoint: checkpoints/stage7/hmc_cap/physiological_event_waveform/seed_20260804/best.pt
+        horizons_seconds: *id009
+        max_seconds: 10
+        patch_samples: 64
+        decoder_dim: 64
+        decoder_layers: 1
+        decoder_heads: 4
+        structured_event_heads: true
+        probabilistic_event_heads: true
+        ecg_refractory_event_head: true
+        ecg_rr_bins: 48
+        output_baseline: none
+        physiological_event_renderer: true
+        multi_resolution_fft_sizes: *id010
+        time_weight: 1.0
+        spectral_weight: 0.25
+        structure_weight: 0.25
+        auxiliary_structure_weight: 0.25
+        probability_weight: 0.25
+        learning_rate: 0.0001
+        maximum_repeat_ratio: 1.15
+      train:
+        epochs: 3
+        batch_size: 32
+        num_workers: 4
+        weight_decay: 0.01
+        grad_clip: 1.0
+        device: cuda
+        output_dir: outputs/stage7/hmc_cap/overlap_add_physiological_waveform/seed_20260804
+  anchored_long_latent_refinement:
+    module: sleepwm.training.gated_long_rollout
+    interface: config
+    requires:
+    - anchored_gated_long_recursive_rollout
+    selected_epoch: 4
+    checkpoint: checkpoints/stage7/hmc_cap/anchored_long_latent_refinement/seed_20260804/best.pt
+    checkpoint_sha256: 24d4a1e10b65d51016daa00d11d05557fa6bcdd56da57e15e0b67cf77423a6c3
+    config:
+      experiment:
+        id: S7R3_anchored_long_latent_refinement
+        kind: forecast
+        seed: 20260804
+      data: *id012
+      model: *id003
+      forecast: *id011
+      physiology: *id008
+      waveform: *id014
+      observation_repair: *id015
+      recursive:
+        checkpoint_path: checkpoints/stage7/hmc_cap/anchored_gated_long_recursive_rollout/seed_20260804/best.pt
+        direct_horizons: *id013
+        long_horizons: *id016
+        anchor_direct: true
+        hidden_dim: 128
+        learning_rate: 0.0001
+        full_modality_probability: 0.35
+        latent_weight: 1.0
+        stage_weight: 0.0
+        physiology_weight: 0.0
+        short_teacher_weight: 0.0
+        uncertainty_weight: 0.05
+        maximum_short_stage_drop: 0.005
+        minimum_correction_rms: 0.0001
+        minimum_uncertainty_std: 0.0001
+        minimum_subset_gate_range: 0.0001
+      train:
+        epochs: 5
+        batch_size: 32
+        num_workers: 4
+        weight_decay: 0.01
+        grad_clip: 1.0
+        device: cuda
+        output_dir: outputs/stage7/hmc_cap/anchored_long_latent_refinement/seed_20260804
+  mainline_missing_waveform_finetune:
+    module: sleepwm.training.mainline_missing_waveform
+    interface: config
+    requires:
+    - anchored_long_latent_refinement
+    - overlap_add_physiological_waveform
+    - task_observation_repair
+    selected_epoch: 2
+    checkpoint: checkpoints/stage7/hmc_cap/mainline_missing_waveform_finetune/seed_20260804/best.pt
+    checkpoint_sha256: 5cdb87ac79d90e9e35091b23bcec8b7d63ff5c817068dfa2c327ed457525b269
+    config:
+      experiment:
+        id: S7I1_mainline_missing_waveform_finetune
+        kind: forecast
+        seed: 20260804
+      data: *id012
+      model: *id003
+      forecast: *id011
+      physiology: *id008
+      waveform:
+        horizons_seconds: *id009
+        max_seconds: 10
+        patch_samples: 64
+        decoder_dim: 64
+        decoder_layers: 1
+        decoder_heads: 4
+        structured_event_heads: true
+        probabilistic_event_heads: true
+        ecg_refractory_event_head: true
+        ecg_rr_bins: 48
+        output_baseline: none
+        physiological_event_renderer: true
+        missing_modality_conditioning: true
+        multi_resolution_fft_sizes: *id010
+        time_weight: 1.0
+        spectral_weight: 0.25
+        structure_weight: 0.25
+        auxiliary_structure_weight: 0.25
+        probability_weight: 0.25
+      observation_repair: *id015
+      recursive: &id017
+        direct_horizons: *id013
+        long_horizons: *id016
+        anchor_direct: true
+        hidden_dim: 128
+      mainline: &id018
+        observation_checkpoint: checkpoints/stage7/hmc_cap/task_observation_repair/seed_20260804/best.pt
+        recursive_checkpoint: checkpoints/stage7/hmc_cap/anchored_long_latent_refinement/seed_20260804/best.pt
+        waveform_checkpoint: checkpoints/stage7/hmc_cap/overlap_add_physiological_waveform/seed_20260804/best.pt
+        state_identity_tolerance: 0.0
+        maximum_w5_waveform_ratio: 1.05
+        minimum_amplitude_ratio: 0.25
+        maximum_amplitude_ratio: 2.5
+      integration_finetune:
+        learning_rate: 0.0001
+        full_modality_probability: 0.35
+      train:
+        epochs: 3
+        batch_size: 32
+        num_workers: 4
+        weight_decay: 0.01
+        grad_clip: 1.0
+        device: cuda
+        output_dir: outputs/stage7/hmc_cap/mainline_missing_waveform_finetune/seed_20260804
+  mainline_missing_physiology_calibration:
+    module: sleepwm.training.mainline_missing_calibration
+    interface: config
+    requires:
+    - anchored_long_latent_refinement
+    - mainline_missing_waveform_finetune
+    - overlap_add_physiological_waveform
+    - task_observation_repair
+    selected_epoch: 2
+    checkpoint: checkpoints/stage7/hmc_cap/mainline_missing_physiology_calibration/seed_20260804/best.pt
+    checkpoint_sha256: c7decc50ac0dfa644123df3fb06e91a9d2ce7f7ceb3ae2df7135159dd6ad02c8
+    config:
+      experiment:
+        id: S7I2_mainline_missing_physiology_calibration
+        kind: forecast
+        seed: 20260804
+      data: *id012
+      model: *id003
+      forecast: *id011
+      physiology: *id008
+      waveform:
+        horizons_seconds: *id009
+        max_seconds: 10
+        patch_samples: 64
+        decoder_dim: 64
+        decoder_layers: 1
+        decoder_heads: 4
+        structured_event_heads: true
+        probabilistic_event_heads: true
+        ecg_refractory_event_head: true
+        ecg_rr_bins: 48
+        output_baseline: none
+        physiological_event_renderer: true
+        missing_modality_conditioning: true
+        missing_physiology_calibration: true
+        multi_resolution_fft_sizes: *id010
+      observation_repair: *id015
+      recursive: *id017
+      mainline: *id018
+      integration_calibration:
+        initial_checkpoint: checkpoints/stage7/hmc_cap/mainline_missing_waveform_finetune/seed_20260804/best.pt
+        learning_rate: 0.0001
+        full_modality_probability: 0.35
+        eeg_spectral_weight: 1.0
+        eeg_energy_weight: 1.0
+        emg_envelope_weight: 0.5
+        emg_rms_weight: 1.0
+        emg_generated_rms_weight: 1.0
+      train:
+        epochs: 3
+        batch_size: 32
+        num_workers: 4
+        weight_decay: 0.01
+        grad_clip: 1.0
+        device: cuda
+        output_dir: outputs/stage7/hmc_cap/mainline_missing_physiology_calibration/seed_20260804
+  mainline_missing_emg_teacher_calibration:
+    module: sleepwm.training.calibrate_mainline_missing_emg
+    interface: config
+    requires:
+    - anchored_long_latent_refinement
+    - mainline_missing_physiology_calibration
+    - mainline_missing_waveform_finetune
+    - overlap_add_physiological_waveform
+    - task_observation_repair
+    selected_epoch: null
+    checkpoint: checkpoints/stage7/hmc_cap/mainline_missing_emg_teacher_calibration/seed_20260804/best.pt
+    checkpoint_sha256: dc821b8a2071de6ba9ea0bf0ee8f446d4a567c669416f73624446835376b6a79
+    config:
+      experiment:
+        id: S7I2C1_mainline_conditional_emg_rms_calibration
+        kind: forecast
+        seed: 20260804
+      data: *id012
+      model: *id003
+      forecast: *id011
+      physiology: *id008
+      waveform: &id019
+        horizons_seconds: *id009
+        max_seconds: 10
+        patch_samples: 64
+        decoder_dim: 64
+        decoder_layers: 1
+        decoder_heads: 4
+        structured_event_heads: true
+        probabilistic_event_heads: true
+        ecg_refractory_event_head: true
+        ecg_rr_bins: 48
+        output_baseline: none
+        physiological_event_renderer: true
+        missing_modality_conditioning: true
+        missing_physiology_calibration: true
+        missing_emg_teacher_calibration: true
+        multi_resolution_fft_sizes: *id010
+      observation_repair: *id015
+      recursive: *id017
+      mainline: *id018
+      teacher_calibration: &id020
+        initial_checkpoint: checkpoints/stage7/hmc_cap/mainline_missing_physiology_calibration/seed_20260804/best.pt
+        i1_checkpoint: checkpoints/stage7/hmc_cap/mainline_missing_waveform_finetune/seed_20260804/best.pt
+        minimum_scale: 0.25
+        maximum_scale: 4.0
+      train:
+        batch_size: 32
+        num_workers: 4
+        device: cuda
+        output_dir: outputs/stage7/hmc_cap/mainline_missing_emg_teacher_calibration/seed_20260804
+  po2_carry_correct_latent_aligned:
+    module: sleepwm.training.partial_observation_filter
+    interface: config
+    requires:
+    - anchored_long_latent_refinement
+    - mainline_missing_emg_teacher_calibration
+    - mainline_missing_physiology_calibration
+    - mainline_missing_waveform_finetune
+    - overlap_add_physiological_waveform
+    - task_observation_repair
+    selected_epoch: 2
+    checkpoint: checkpoints/partial_observation/po2_carry_correct_latent_aligned/seed_20260804/best.pt
+    checkpoint_sha256: c87386798f0178124546b8382dc86a0efd9ebfc291cba89e381ddde00ab1b1c0
+    config:
+      experiment:
+        id: PO2_freshness_carry_correct_latent_aligned
+        kind: partial_observation_training
+        seed: 20260804
+      data: *id012
+      model: *id003
+      forecast: *id011
+      physiology: *id008
+      waveform: *id019
+      observation_repair: *id015
+      recursive: *id017
+      mainline: *id018
+      teacher_calibration: *id020
+      train:
+        batch_size: 32
+        num_workers: 4
+        device: cuda:0
+        output_dir: outputs/partial_observation/po2_carry_correct_latent_aligned/seed_20260804
+        epochs: 4
+        grad_clip: 1.0
+      baseline: &id021
+        checkpoint_path: checkpoints/stage7/hmc_cap/mainline_missing_emg_teacher_calibration/seed_20260804/best.pt
+        rollback_release: checkpoints/auxiliary
+      dynamic_observation: &id022
+        duration_epochs:
+        - 1
+        - 2
+        - 4
+        - 10
+        recovery_epochs: *id013
+        full_observation_repeats: 5
+        primary_horizons: *id013
+      partial_observation:
+        enabled: true
+        hidden_dim: 128
+        initial_freshness_decay: 0.35
+        initial_uncertainty_age_scale: 0.15
+        initial_uncertainty_horizon_scale: 0.05
+        learning_rate: 0.0002
+        full_reference_macro_f1: 0.6116
+        maximum_full_drop: 0.005
+        maximum_dynamic_latent_smooth_l1: 0.0751
+        losses: &id023
+          history_distillation: 2.0
+          future_distillation: 6.0
+          stage: 0.25
+          uncertainty_nll: 0.1
+  po2_carry_correct_final:
+    module: sleepwm.training.partial_observation_filter
+    interface: config
+    requires:
+    - anchored_long_latent_refinement
+    - mainline_missing_emg_teacher_calibration
+    - mainline_missing_physiology_calibration
+    - mainline_missing_waveform_finetune
+    - overlap_add_physiological_waveform
+    - po2_carry_correct_latent_aligned
+    - task_observation_repair
+    selected_epoch: 2
+    checkpoint: checkpoints/partial_observation/po2_carry_correct_final/seed_20260804/best.pt
+    checkpoint_sha256: 31e0463445a49d3dfdca709ee7792c353ac24a6ecccd17e39819a060cae24905
+    config:
+      experiment:
+        id: PO2_freshness_carry_correct_final
+        kind: partial_observation_training
+        seed: 20260804
+      data: *id012
+      model: *id003
+      forecast: *id011
+      physiology: *id008
+      waveform: *id019
+      observation_repair: *id015
+      recursive: *id017
+      mainline: *id018
+      teacher_calibration: *id020
+      train:
+        batch_size: 32
+        num_workers: 4
+        device: cuda:0
+        output_dir: outputs/partial_observation/po2_carry_correct_final/seed_20260804
+        epochs: 2
+        grad_clip: 1.0
+      baseline: *id021
+      dynamic_observation: *id022
+      partial_observation:
+        enabled: true
+        hidden_dim: 128
+        initial_freshness_decay: 0.35
+        initial_uncertainty_age_scale: 0.15
+        initial_uncertainty_horizon_scale: 0.05
+        learning_rate: 0.0002
+        initial_checkpoint: checkpoints/partial_observation/po2_carry_correct_latent_aligned/seed_20260804/best.pt
+        duration_weight_scale: 2.0
+        full_reference_macro_f1: 0.6116
+        maximum_full_drop: 0.005
+        maximum_dynamic_latent_smooth_l1: 0.0839
+        losses: *id023
+  po4_trajectory_outcome_adapter:
+    module: sleepwm.training.trajectory_outcome_adapter
+    interface: config
+    requires:
+    - anchored_long_latent_refinement
+    - mainline_missing_emg_teacher_calibration
+    - mainline_missing_physiology_calibration
+    - mainline_missing_waveform_finetune
+    - overlap_add_physiological_waveform
+    - po2_carry_correct_final
+    - task_observation_repair
+    selected_epoch: 4
+    checkpoint: checkpoints/partial_observation/po4_trajectory_outcome_adapter/seed_20260804/best.pt
+    checkpoint_sha256: f1ec1a55378e661f168fedee66bf9b4bf3b4520dab3e30946bf3d9cf10f0d5ce
+    config:
+      experiment:
+        id: PO4_O1_trajectory_outcome_adapter
+        kind: partial_observation_training
+        seed: 20260804
+      data: *id012
+      model: *id003
+      forecast: *id011
+      physiology: *id008
+      waveform: *id019
+      observation_repair: *id015
+      recursive: *id017
+      mainline: *id018
+      teacher_calibration: *id020
+      train:
+        batch_size: 32
+        num_workers: 4
+        device: cuda:0
+        output_dir: outputs/partial_observation/po4_trajectory_outcome_adapter/seed_20260804
+        epochs: 4
+        grad_clip: 1.0
+      baseline: *id021
+      partial_observation: &id024
+        hidden_dim: 128
+        initial_freshness_decay: 0.35
+        initial_uncertainty_age_scale: 0.15
+        initial_uncertainty_horizon_scale: 0.05
+      belief_filter: &id025
+        initial_checkpoint: checkpoints/partial_observation/po2_carry_correct_final/seed_20260804/best.pt
+        hidden_dim: 128
+        maximum_delta: 0.5
+        learning_rate: 0.0002
+        full_reference_macro_f1: 0.6116
+        maximum_full_drop: 0.005
+        losses:
+          trajectory: 4.0
+          dynamics: 2.0
+          future: 1.0
+          stage: 0.25
+      outcome_adapter:
+        hidden_dim: 128
+        maximum_stage_delta: 2.0
+        maximum_physiology_delta: 1.0
+        learning_rate: 0.0002
+        stage_weight: 1.0
+        physiology_weight: 1.0
+        regularizer_weight: 0.001
+  po3_recursive_belief:
+    module: sleepwm.training.recursive_belief_filter
+    interface: config
+    requires:
+    - anchored_long_latent_refinement
+    - mainline_missing_emg_teacher_calibration
+    - mainline_missing_physiology_calibration
+    - mainline_missing_waveform_finetune
+    - overlap_add_physiological_waveform
+    - po2_carry_correct_final
+    - task_observation_repair
+    selected_epoch: 4
+    checkpoint: checkpoints/partial_observation/po3_recursive_belief/seed_20260804/best.pt
+    checkpoint_sha256: 41919c8cc613ca4626664d8cfab85f09a93c1a592c138a673c03f99145e2fa93
+    config:
+      experiment:
+        id: PO3_recursive_latent_belief_filter
+        kind: partial_observation_training
+        seed: 20260804
+      data: *id012
+      model: *id003
+      forecast: *id011
+      physiology: *id008
+      waveform: *id019
+      observation_repair: *id015
+      recursive: *id017
+      mainline: *id018
+      teacher_calibration: *id020
+      train:
+        batch_size: 32
+        num_workers: 4
+        device: cuda:0
+        output_dir: outputs/partial_observation/po3_recursive_belief/seed_20260804
+        epochs: 4
+        grad_clip: 1.0
+      baseline: *id021
+      partial_observation: *id024
+      belief_filter: *id025
+  po17_latent_hazard_safe_adapter:
+    module: sleepwm.training.latent_hazard_safe_adapter
+    interface: config
+    requires:
+    - direct
+    - po3_recursive_belief
+    - po4_trajectory_outcome_adapter
+    selected_epoch: 7
+    checkpoint: checkpoints/partial_observation/po17_latent_hazard_safe_adapter/seed_20260804/best.pt
+    checkpoint_sha256: 0b8650716b8cf33082078293f4f82af5d258178e6b9863a14f99217c3cffcf3a
+    config:
+      experiment:
+        id: PO17_latent_hazard_safe_adapter
+        seed: 20260804
+      checkpoints:
+        po3: checkpoints/partial_observation/po3_recursive_belief/seed_20260804/best.pt
+        outcome: checkpoints/partial_observation/po4_trajectory_outcome_adapter/seed_20260804/best.pt
+        direct: checkpoints/dynamic_paper_baselines_matched/grud/seed_20260804/best.pt
+      data:
+        manifest_path: data/manifests/hmc_cap_processed_manifest.csv
+        normalization_path: data/manifests/hmc_cap_train_normalization.json
+      physiology:
+        feature_manifest_path: data/features/feature_manifest.csv
+        feature_statistics_path: data/features/feature_statistics.json
+      fusion:
+        hidden_dim: 128
+        maximum_physiology_residual: 0.35
+        initial_direct_gate: 0.65
+        dropout: 0.1
+        learning_rate: 0.0003
+        physiology_weight: 1.0
+        event_weight: 1.0
+        event_ranking_weight: 0.2
+        gate_supervision_weight: 0.2
+        gate_target_temperature: 0.15
+        regularizer_weight: 0.001
+      train:
+        epochs: 7
+        batch_size: 24
+        num_workers: 4
+        weight_decay: 0.01
+        grad_clip: 1.0
+        device: cuda:0
+        output_dir: outputs/partial_observation/po17_latent_hazard_safe_adapter
+  po18_reliability_event_correction:
+    module: sleepwm.training.sleepwm_event_correction
+    interface: checkpoints
+    requires:
+    - direct
+    - direct_event
+    - po17_latent_hazard_safe_adapter
+    - po3_recursive_belief
+    - po4_trajectory_outcome_adapter
+    selected_epoch: 3
+    checkpoint: checkpoints/partial_observation/po18_reliability_event_correction/seed_20260804/best.pt
+    checkpoint_sha256: 12c065f59fe47c2996ca37ec95d5d859cf95f73f3c9970cf64f390d1e699f325
+    config:
+      experiment: *id026
+      checkpoints:
+        po17: checkpoints/partial_observation/po17_latent_hazard_safe_adapter/seed_20260804/best.pt
+        po3: checkpoints/partial_observation/po3_recursive_belief/seed_20260804/best.pt
+        outcome: checkpoints/partial_observation/po4_trajectory_outcome_adapter/seed_20260804/best.pt
+        direct: checkpoints/dynamic_paper_baselines_matched/grud/seed_20260804/best.pt
+        direct_event: checkpoints/dynamic_event_hazard_matched/grud/seed_20260804/best.pt
+      train:
+        device: cuda:0
+        epochs: 5
+        output_dir: outputs/partial_observation/po18_reliability_event_correction

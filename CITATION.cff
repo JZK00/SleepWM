@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "Please cite the accompanying SleepWM article and this software release."
+title: "SleepWM: A Self-Supervised Multimodal Physiological World Model for Sleep Forecasting"
+type: software
+version: 1.1.0
+authors:
+  - family-names: "Wu"
+    given-names: "Rui"
+repository-code: "https://github.com/JZK00/SleepWM"
+license: MIT
+keywords:
+  - physiological world model
+  - self-supervised learning
+  - multimodal representation learning
+  - sleep forecasting
+  - EEG
+  - ECG
+  - EMG
+abstract: >-
+  Research code for a self-supervised multimodal
+  physiological world model that learns cross-modal regularities from EEG,
+  ECG, and EMG and forecasts future sleep state, physiology, and transitions.
