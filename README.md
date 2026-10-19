@@ -270,16 +270,4 @@ Archived CPU verification used Python 3.10 and PyTorch 2.6.0: 21 targeted tests,
 
 Study results derive from retrospective controlled observation changes. Naturally occurring failures, prospective device performance and clinical workflows require further evaluation. The learned state is observational, and component ablations do not establish recursion alone as the source of the complete system's advantage.
 
-## Citation
 
-Software metadata are provided in [CITATION.cff](CITATION.cff). Cite the accompanying manuscript under its title:
-
-> *SleepWM is an observational world model for multimodal sleep state completion and forecasting.*
-
-A public manuscript link and permanent archival software identifier will be added when available.
-
-## License and acknowledgements
-
-The code is distributed under the [MIT license](LICENSE), with the original notice retained. Dataset access and redistribution follow provider licenses; dependencies retain their own licenses.
-
-The final readout includes GRU-D. Attribution: Che et al., *Recurrent Neural Networks for Multivariate Time Series with Missing Values*, Scientific Reports 8, 6085 (2018), [doi:10.1038/s41598-018-24271-9](https://doi.org/10.1038/s41598-018-24271-9).
