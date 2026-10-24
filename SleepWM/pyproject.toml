@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sleepwm"
+version = "0.3.0"
+description = "SleepWM model implementation with staged and supervised training interfaces"
+authors = [{name = "吴睿"}]
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.26,<3", "scipy>=1.11,<2", "scikit-learn>=1.3,<2", "torch>=2.2,<3", "PyYAML>=6,<7"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7,<9"]
+
+[tool.setuptools.packages.find]
+include = ["sleepwm*"]
+
+[tool.setuptools.package-data]
+sleepwm = ["stage_settings.json"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

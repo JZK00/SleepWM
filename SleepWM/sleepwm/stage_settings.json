@@ -1,0 +1,193 @@
+{
+  "carry_align": {
+    "train": {
+      "batch_size": 32,
+      "num_workers": 0,
+      "epochs": 4,
+      "grad_clip": 1.0
+    },
+    "partial_observation": {
+      "enabled": true,
+      "hidden_dim": 128,
+      "initial_freshness_decay": 0.35,
+      "initial_uncertainty_age_scale": 0.15,
+      "initial_uncertainty_horizon_scale": 0.05,
+      "learning_rate": 0.0002,
+      "maximum_full_drop": 0.005,
+      "maximum_dynamic_latent_smooth_l1": 0.0751,
+      "losses": {
+        "history_distillation": 2.0,
+        "future_distillation": 6.0,
+        "stage": 0.25,
+        "uncertainty_nll": 0.1
+      }
+    },
+    "dynamic_observation": {
+      "duration_epochs": [
+        1,
+        2,
+        4,
+        10
+      ],
+      "recovery_epochs": [
+        1,
+        2,
+        4
+      ],
+      "full_observation_repeats": 5,
+      "primary_horizons": [
+        1,
+        2,
+        4
+      ]
+    }
+  },
+  "carry_final": {
+    "train": {
+      "batch_size": 32,
+      "num_workers": 0,
+      "epochs": 2,
+      "grad_clip": 1.0
+    },
+    "partial_observation": {
+      "enabled": true,
+      "hidden_dim": 128,
+      "initial_freshness_decay": 0.35,
+      "initial_uncertainty_age_scale": 0.15,
+      "initial_uncertainty_horizon_scale": 0.05,
+      "learning_rate": 0.0002,
+      "duration_weight_scale": 2.0,
+      "maximum_full_drop": 0.005,
+      "maximum_dynamic_latent_smooth_l1": 0.0839,
+      "losses": {
+        "history_distillation": 2.0,
+        "future_distillation": 6.0,
+        "stage": 0.25,
+        "uncertainty_nll": 0.1
+      }
+    },
+    "dynamic_observation": {
+      "duration_epochs": [
+        1,
+        2,
+        4,
+        10
+      ],
+      "recovery_epochs": [
+        1,
+        2,
+        4
+      ],
+      "full_observation_repeats": 5,
+      "primary_horizons": [
+        1,
+        2,
+        4
+      ]
+    }
+  },
+  "belief": {
+    "train": {
+      "batch_size": 32,
+      "num_workers": 0,
+      "epochs": 4,
+      "grad_clip": 1.0
+    },
+    "partial_observation": {
+      "hidden_dim": 128,
+      "initial_freshness_decay": 0.35,
+      "initial_uncertainty_age_scale": 0.15,
+      "initial_uncertainty_horizon_scale": 0.05
+    },
+    "belief_filter": {
+      "hidden_dim": 128,
+      "maximum_delta": 0.5,
+      "learning_rate": 0.0002,
+      "maximum_full_drop": 0.005,
+      "losses": {
+        "trajectory": 4.0,
+        "dynamics": 2.0,
+        "future": 1.0,
+        "stage": 0.25
+      }
+    }
+  },
+  "outcome": {
+    "train": {
+      "batch_size": 32,
+      "num_workers": 0,
+      "epochs": 4,
+      "grad_clip": 1.0
+    },
+    "outcome_adapter": {
+      "hidden_dim": 128,
+      "maximum_stage_delta": 2.0,
+      "maximum_physiology_delta": 1.0,
+      "learning_rate": 0.0002,
+      "stage_weight": 1.0,
+      "physiology_weight": 1.0,
+      "regularizer_weight": 0.001
+    }
+  },
+  "direct": {
+    "train": {
+      "epochs": 10,
+      "batch_size": 24,
+      "num_workers": 0,
+      "learning_rate": 0.0005,
+      "weight_decay": 0.01,
+      "grad_clip": 1.0
+    },
+    "model": {
+      "architecture": "grud",
+      "feature_dim": 32,
+      "hidden_dim": 96,
+      "layers": 2,
+      "heads": 4,
+      "dropout": 0.1
+    },
+    "dynamic_baseline": {
+      "full_observation_probability": 0.35
+    },
+    "losses": {
+      "current_stage": 0.25,
+      "stage": 1.0,
+      "physiology": 1.0,
+      "consistency": 0.0
+    }
+  },
+  "direct_event": {
+    "train": {
+      "epochs": 5,
+      "num_workers": 0
+    }
+  },
+  "fusion": {
+    "train": {
+      "epochs": 7,
+      "batch_size": 24,
+      "num_workers": 0,
+      "weight_decay": 0.01,
+      "grad_clip": 1.0
+    },
+    "fusion": {
+      "hidden_dim": 128,
+      "maximum_physiology_residual": 0.35,
+      "initial_direct_gate": 0.65,
+      "dropout": 0.1,
+      "learning_rate": 0.0003,
+      "physiology_weight": 1.0,
+      "event_weight": 1.0,
+      "event_ranking_weight": 0.2,
+      "gate_supervision_weight": 0.2,
+      "gate_target_temperature": 0.15,
+      "regularizer_weight": 0.001
+    }
+  },
+  "event": {
+    "train": {
+      "epochs": 5,
+      "num_workers": 0
+    }
+  }
+}
