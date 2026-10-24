@@ -2,8 +2,6 @@
 
 **Brain–heart–muscle representation for sleep state forecasting under changing observations.**
 
-**吴睿 · 四川大学**
-
 ## Overview
 
 SleepWM integrates EEG, ECG and EMG into a shared physiological state representation. It combines state prediction with observation-based correction to track sleep dynamics when signals become unavailable and when observations return.
